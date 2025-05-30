@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>✞𝕭𝖎𝖙𝖈𝖍✞</title>
+<style>
+body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: transparent; color: #f0f0f0; }
+
+header { background: rgba(35,39,43,0.85); padding: 1rem; text-align: center; font-size: 1.5rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.12); }
+
+#walletOverlay {
+  display: none;
+  position: fixed;
+  top: 10vh;
+  left: 10vw;
+  width: 220px;
+  min-height: 60px;
+  max-height: 30vh;
+  background: rgba(30,30,30,0.92);
+  color: #fff;
+  z-index: 9999;
+  overflow: auto;
+  padding: 1rem 1.2rem;
+  font-size: 1.2rem;
+  border-radius: 10px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.25);
+  border: 4px solid transparent;
+  border-image: linear-gradient(to right, cyan, pink) 1;
+  box-sizing: border-box;
+}
+
+/* Transparency and options controls */
+#walletTransparencyControl {
+  display: none;
+  position: fixed;
+  top: calc(10vh + 34px);
+  left: 10vw;
+  width: 200px;
+  z-index: 10000;
+  padding: 0.5rem 0.7rem 0.7rem 0.7rem;
+  background: rgba(35,39,43,0.7);
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.10);
+  font-size: 1em;
+  overflow: hidden;
+  border: 1px solid black;
+}
+
+#debugPanel {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  max-height: 20vh;
+  overflow-y: auto;
+  background-color: rgba(0, 0, 0, 0.8);
+  color: white;
+  font-size: 0.9em;
+  padding: 0.5em;
+  z-index: 10000;
+}
+
+/* Popup for EXP Earned floating notification */
+#xpEarnedPopup {
+  position: fixed;
+  background: rgba(26, 148, 2, 0.9);
+  color: #f1efef;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-weight: bold;
+  font-size: 1rem;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 99999;
+  transition: opacity 0.5s, transform 0.5s;
+}
+</style>
+</head>
+<body>
+
+<!-- Main overlay box with gradient border -->
+<div id="walletOverlay"></div>
+
+<!-- Transparency and options controls -->
+<div id="walletTransparencyControl">
+  <label for="walletTransparencySlider" style="color:#fff;font-weight:600;">Transparency</label>
+  <input type="range" id="walletTransparencySlider" min="0.2" max="1" step="0.01" value="0.92" style="width: calc(100% - 32px); margin: 32 0px;">
+  <div id="overlayOptionsPanel" style="margin-top:0.7em;">
+    <label style="color:#fff;"><input type="checkbox" id="showJob" checked/> Job</label><br>
+    <label style="color:#fff;"><input type="checkbox" id="showLevel" checked/> Level</label><br>
+    <label style="color:#fff;"><input type="checkbox" id="showBonusXP" checked/> Bonus XP</label><br>
+    <label style="color:#fff;"><input type="checkbox" id="showXPPercent" checked/> %</label><br>
+    <label style="color:#fff;"><input type="checkbox" id="showRawXP" checked/> Total XP</label><br>
+    <label style="color:#fff;"><input type="checkbox" id="showWallet" checked/> Wallet</label><br>
+    <label style="color:#fff;"><input type="checkbox" id="showExpEarned" checked/> EXP Earned</label>
+  </div>
+</div>
+
+<!-- Popup for EXP Earned floating notification -->
+<div id="xpEarnedPopup"></div>
+
+<script>
+(function() {
+  // Map for jobs
+  const jobExpTokenMap = [
+    { jobName: "EMS / Paramedic", itemId: "exp_token_a|ems|ems" },
+    { jobName: "Firefighter", itemId: "exp_token_a|ems|fire" },
+    { jobName: "Farmer", itemId: "exp_token_a|farming|farming" },
+    { jobName: "Fisherman", itemId: "exp_token_a|farming|fishing" },
+    { jobName: "Miner", itemId: "exp_token_a|farming|mining" },
+    { jobName: "Wildlife Hunter", itemId: "exp_token_a|hunting|skill" },
+    { jobName: "Cargo Pilot", itemId: "exp_token_a|piloting|cargos" },
+    { jobName: "Helicopter Pilot", itemId: "exp_token_a|piloting|heli" },
+    { jobName: "Airline Pilot", itemId: "exp_token_a|piloting|piloting" },
+    { jobName: "Street Racer", itemId: "exp_token_a|player|racing" },
+    { jobName: "Bus Driver", itemId: "exp_token_a|train|bus" },
+    { jobName: "Train Conductor", itemId: "exp_token_a|train|train" },
+    { jobName: "Garbage Collector", itemId: "exp_token_a|trucking|garbage" },
+    { jobName: "Mechanic", itemId: "exp_token_a|trucking|mechanic" },
+    { jobName: "PostOP Driver", itemId: "exp_token_a|trucking|postop" },
+    { jobName: "Trucker", itemId: "exp_token_a|trucking|trucking" }
+  ];
+
+  // Utility functions
+  function formatWallet(val) {
+    if (val == null || isNaN(val)) return 'N/A';
+    const abs = Math.abs(val);
+    if (abs >= 1e12) return (val/1e12).toFixed(2) + 't';
+    if (abs >= 1e9) return (val/1e9).toFixed(2) + 'b';
+    if (abs >= 1e6) return (val/1e6).toFixed(2) + 'm';
+    if (abs >= 1e3) return (val/1e3).toFixed(2) + 'k';
+    return val.toLocaleString();
+  }
+
+  function formatTruckingXP(xp) {
+    if (xp == null || isNaN(xp)) return '0%';
+    const percent = Math.max(0, Math.min(100, (xp / 1_000_000) * 100));
+    return percent.toFixed(2) + '%';
+  }
+
+  let lastXpData = null;
+  let lastXpValue = null;
+  let totalXpGained = 0;
+
+  const overlayOptionsDefaults = {
+    showWallet: true,
+    showXPPercent: true,
+    showRawXP: true,
+    showBonusXP: true,
+    showJob: true,
+    showLevel: true,
+    showExpEarned: false // Hidden in main overlay
+  };
+
+  function getOverlayOptions() {
+    let opts = {};
+    try {
+      const saved = JSON.parse(localStorage.getItem('walletOverlay_options'));
+      opts = { ...overlayOptionsDefaults, ...saved };
+    } catch (e) { opts = { ...overlayOptionsDefaults }; }
+    return opts;
+  }
+
+  function saveOverlayOptions(opts) {
+    try { localStorage.setItem('walletOverlay_options', JSON.stringify(opts)); } catch (e) {}
+  }
+
+  function updateOverlayOptionsPanel() {
+    const opts = getOverlayOptions();
+    document.getElementById('showJob').checked = !!opts.showJob;
+    document.getElementById('showLevel').checked = !!opts.showLevel;
+    document.getElementById('showBonusXP').checked = !!opts.showBonusXP;
+    document.getElementById('showXPPercent').checked = !!opts.showXPPercent;
+    document.getElementById('showRawXP').checked = !!opts.showRawXP;
+    document.getElementById('showWallet').checked = !!opts.showWallet;
+    document.getElementById('showExpEarned').checked = !!opts.showExpEarned;
+  }
+
+  function listenOverlayOptionsPanel() {
+    ['showWallet','showXPPercent','showRawXP','showBonusXP','showJob','showLevel','showExpEarned'].forEach(id => {
+      document.getElementById(id).addEventListener('change', () => {
+        const opts = getOverlayOptions();
+        opts[id] = document.getElementById(id).checked;
+        saveOverlayOptions(opts);
+        updateWalletOverlayFromDataset();
+      });
+    });
+  }
+
+  function updateWalletOverlayFromDataset() {
+    const overlay = document.getElementById('walletOverlay');
+    let wallet = overlay.dataset.wallet ? Number(overlay.dataset.wallet) : null;
+    let truckingXP = overlay.dataset.truckingXp ? Number(overlay.dataset.truckingXp) : null;
+    let bonusXP = overlay.dataset.bonusXp ? Number(overlay.dataset.bonusXp) : null;
+    let jobName = overlay.dataset.jobName || '';
+    updateWalletOverlay(wallet, truckingXP, bonusXP, jobName);
+  }
+
+  // Main function to update overlay display
+  function updateWalletOverlay(wallet, truckingXP, bonusXP, jobName) {
+    const overlay = document.getElementById('walletOverlay');
+
+    // Save to localStorage
+    try {
+      if (wallet != null && !isNaN(wallet)) localStorage.setItem('walletOverlay_wallet', wallet);
+      if (truckingXP != null && !isNaN(truckingXP)) localStorage.setItem('walletOverlay_truckingXp', truckingXP);
+      if (bonusXP != null && !isNaN(bonusXP)) localStorage.setItem('walletOverlay_bonusXp', bonusXP);
+      if (jobName) localStorage.setItem('walletOverlay_jobName', jobName);
+    } catch (e) {}
+
+    // Cross-reference job name
+    let jobToken = jobName;
+    if (jobName) {
+      const jobEntry = jobExpTokenMap.find(entry => entry.jobName.toLowerCase() === jobName.toLowerCase());
+      if (jobEntry) { jobToken = jobEntry.itemId; }
+    }
+
+    // Map for XP fields based on job
+    const jobExpFieldMap = {
+      "Trucker": "exp_trucking_trucking",
+      "Mechanic": "exp_trucking_mechanic",
+      "Garbage Collector": "exp_trucking_garbage",
+      "PostOP Driver": "exp_trucking_postop",
+      "Airline Pilot": "exp_piloting_piloting",
+      "Helicopter Pilot": "exp_piloting_heli",
+      "Cargo Pilot": "exp_piloting_cargos",
+      "Bus Driver": "exp_train_bus",
+      "Train Conductor": "exp_train_train",
+      "EMS / Paramedic": "exp_ems_ems",
+      "Firefighter": "exp_ems_fire",
+      "Businesses": "exp_business_business",
+      "Street Racer": "exp_player_racing",
+      "Farmer": "exp_farming_farming",
+      "Fisherman": "exp_farming_fishing",
+      "Miner": "exp_farming_mining",
+      "Wildlife Hunter": "exp_hunting_skill"
+    };
+
+    let xpVal = null;
+    if (jobName && typeof jobExpFieldMap[jobName] === "string" && lastXpData) {
+      const xpField = jobExpFieldMap[jobName];
+      if (typeof lastXpData[xpField] !== "undefined") {
+        xpVal = Number(lastXpData[xpField]);
+      }
+    }
+    if (xpVal == null && typeof truckingXP !== "undefined" && truckingXP !== null) {
+      xpVal = Number(truckingXP);
+    }
+    let xpPercent = (xpVal != null && !isNaN(xpVal)) ? (Math.max(0, Math.min(100, (xpVal / 1_000_000) * 100))) : 0;
+
+    // --- EXP Earned (pop-up) ---
+    const opts = getOverlayOptions();
+    if (opts.showExpEarned) {
+      if (xpVal != null && typeof lastXpValue === 'number') {
+        const gained = xpVal - lastXpValue;
+        if (gained > 0) {
+          totalXpGained += gained;
+          showXpPopup(gained);
+        }
+      }
+      lastXpValue = xpVal;
+    }
+
+    // Build overlay fields in order
+    let fields = [];
+    if (opts.showJob && jobName) {
+      fields.push(`<b>Job:</b> <span style='font-size:1.1em;color:#ffa07a;'>${jobName}</span>`);
+    }
+    if (opts.showLevel) {
+      let level = (xpVal != null && !isNaN(xpVal)) ? Math.floor((Math.sqrt(1 + 8 * xpVal / 5) - 1) / 2) : null;
+      fields.push(`<b>Level:</b> <span style='font-size:1.1em;color:#b0e0e6;'>${level != null && level >= 0 ? level : 'N/A'}</span>`);
+    }
+    if (opts.showBonusXP) {
+      fields.push(`<b>Bonus XP Left:</b> <span style='font-size:1.1em;color:#ffd700;'>${bonusXP != null && !isNaN(bonusXP) ? Number(bonusXP).toLocaleString() : 'N/A'}</span>`);
+    }
+    if (opts.showXPPercent) {
+      fields.push(`<b>XP:</b> <span style="font-size:1.1em;color:#8cf0ff;">${xpPercent.toFixed(2)}%</span>`);
+    }
+    if (opts.showRawXP) {
+      fields.push(`<b>Total XP:</b> <span style='font-size:1.1em;color:#ffb347;'>${xpVal != null && !isNaN(xpVal) ? Math.floor(xpVal).toLocaleString() : 'N/A'}</span>`);
+    }
+    if (opts.showWallet) {
+      fields.push(`<b>Wallet:</b> <span style="font-size:1.3em;color:#7cff7c;">${wallet != null && !isNaN(wallet) ? formatWallet(wallet) : 'N/A'}</span>`);
+    }
+
+    // Set innerHTML
+    overlay.innerHTML = fields.join('<br>');
+    overlay.style.display = 'block';
+
+    // Set background transparency
+    setOverlayAlpha(slider.value);
+  }
+
+  // Transparency slider
+  const overlay = document.getElementById('walletOverlay');
+  const transparencyControl = document.getElementById('walletTransparencyControl');
+  const slider = document.getElementById('walletTransparencySlider');
+
+  function setOverlayAlpha(alpha) {
+    overlay.style.background = `rgba(30,30,30,${alpha})`;
+    // Optional: adjust colors of child elements if needed
+  }
+
+  // Restore transparency from localStorage
+  function restoreOverlayAlpha() {
+    const alpha = localStorage.getItem('walletOverlay_alpha') || '0.92';
+    slider.value = alpha;
+    setOverlayAlpha(alpha);
+  }
+
+  slider && slider.addEventListener('input', () => {
+    setOverlayAlpha(slider.value);
+    try { localStorage.setItem('walletOverlay_alpha', slider.value); } catch (e) {}
+  });
+
+  // Make overlay draggable
+  function makeDraggable(el) {
+    let isDragging = false, offsetX = 0, offsetY = 0;
+    el.addEventListener('mousedown', (e) => {
+      isDragging = true;
+      offsetX = e.clientX - el.offsetLeft;
+      offsetY = e.clientY - el.offsetTop;
+      el.style.cursor = 'grabbing';
+    });
+    document.addEventListener('mousemove', (e) => {
+      if (isDragging) {
+        el.style.left = (e.clientX - offsetX) + 'px';
+        el.style.top = (e.clientY - offsetY) + 'px';
+        // Keep control panel aligned
+        transparencyControl.style.left = el.style.left;
+        transparencyControl.style.top = (parseInt(el.style.top) + el.offsetHeight + 4) + 'px';
+      }
+    });
+    document.addEventListener('mouseup', () => {
+      if (isDragging) {
+        // Save position
+        localStorage.setItem('overlayPos_walletOverlay', JSON.stringify({ left: el.offsetLeft, top: el.offsetTop }));
+        isDragging = false;
+        el.style.cursor = 'move';
+      }
+    });
+  }
+
+  function restoreOverlayPosition(id, el, defaultLeft, defaultTop) {
+    const saved = localStorage.getItem('overlayPos_' + id);
+    if (saved) {
+      try {
+        const pos = JSON.parse(saved);
+        if (typeof pos.left === 'number' && typeof pos.top === 'number') {
+          el.style.left = pos.left + 'px';
+          el.style.top = pos.top + 'px';
+          return;
+        }
+      } catch (e) {}
+    }
+    // Default position
+    el.style.left = defaultLeft;
+    el.style.top = defaultTop;
+  }
+
+  // Data extraction (simulated here)
+  function extractOverlayData(eventData) {
+    // For demo, using dummy data
+    return {
+      wallet: 1234567890,
+      truckingXP: 500000,
+      bonusXP: 2000,
+      jobName: "Firefighter"
+    };
+  }
+
+  // Show XP popup
+  function showXpPopup(gainedXp) {
+    const popup = document.getElementById('xpEarnedPopup');
+    const overlayRect = overlay.getBoundingClientRect();
+    let popupX = overlayRect.right - 114;
+    const popupY = overlayRect.top - 15;
+
+    popup.textContent = `EXP +${Math.floor(gainedXp)}`;
+    popup.style.opacity = '1';
+    popup.style.transform = 'translateY(0)';
+    popup.style.display = 'block';
+
+    const popupWidth = popup.offsetWidth;
+    if (popupX + popupWidth > window.innerWidth) {
+      popupX = window.innerWidth - popupWidth - 10;
+    }
+
+    popup.style.left = `${popupX}px`;
+    popup.style.top = `${popupY}px`;
+
+    setTimeout(() => {
+      popup.style.opacity = '0';
+      popup.style.transform = 'translateY(-10px)';
+    }, 1000);
+    setTimeout(() => {
+      popup.style.display = 'none';
+    }, 1500);
+  }
+
+  // Initialize on load
+  window.addEventListener('DOMContentLoaded', () => {
+    const overlayEl = document.getElementById('walletOverlay');
+
+    // Restore position
+    restoreOverlayPosition('walletOverlay', overlayEl, '10vw', '10vh');
+
+    // Make draggable
+    makeDraggable(overlayEl);
+
+    // Show overlay
+    overlayEl.style.display = 'block';
+
+    // Force reflow to stabilize layout
+    void overlayEl.offsetWidth;
+
+    // Load stored data
+    const storedWallet = localStorage.getItem('walletOverlay_wallet');
+    const storedTruckingXp = localStorage.getItem('walletOverlay_truckingXp');
+    const storedBonusXp = localStorage.getItem('walletOverlay_bonusXp');
+    const storedJob = localStorage.getItem('walletOverlay_jobName') || '';
+
+    // Convert to numbers if possible
+    const walletNum = storedWallet ? Number(storedWallet) : null;
+    const truckingXpNum = storedTruckingXp ? Number(storedTruckingXp) : null;
+    const bonusXpNum = storedBonusXp ? Number(storedBonusXp) : null;
+
+    // Set dataset for reference
+    overlayEl.dataset.wallet = walletNum != null ? walletNum : '';
+    overlayEl.dataset.truckingXp = truckingXpNum != null ? truckingXpNum : '';
+    overlayEl.dataset.bonusXp = bonusXpNum != null ? bonusXpNum : '';
+    overlayEl.dataset.jobName = storedJob;
+
+    // Update overlay content immediately
+    updateWalletOverlay(walletNum, truckingXpNum, bonusXpNum, storedJob);
+
+    // Initialize transparency controls
+    restoreOverlayAlpha();
+
+    // Show transparency control
+    if (overlayEl.style.display !== 'none') {
+      document.getElementById('walletTransparencyControl').style.display = '';
+    }
+
+    // Setup options panel
+    updateOverlayOptionsPanel();
+    listenOverlayOptionsPanel();
+  });
+})();
+</script>
+
+</body>
+</html>
