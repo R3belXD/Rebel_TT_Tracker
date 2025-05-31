@@ -284,22 +284,8 @@
         const slider = document.getElementById('walletTransparencySlider');
 
         function setOverlayAlpha(alpha) {
+            // ONLY change background transparency, leave text and borders intact
             overlay.style.background = `rgba(30,30,30,${alpha})`;
-            Array.from(overlay.querySelectorAll('*')).forEach(el => {
-                if (el.tagName !== 'BR') {
-                    let orig = el.dataset.origColor;
-                    if (!orig) {
-                        orig = window.getComputedStyle(el).color;
-                        el.dataset.origColor = orig;
-                    }
-                    let match = orig.match(/^rgb\((\d+),\s*(\d+),\s*(\d+)\)$/);
-                    if (match) {
-                        el.style.color = `rgba(${match[1]},${match[2]},${match[3]},${alpha})`;
-                    } else {
-                        el.style.opacity = alpha;
-                    }
-                }
-            });
         }
 
         function restoreOverlayAlpha() {
